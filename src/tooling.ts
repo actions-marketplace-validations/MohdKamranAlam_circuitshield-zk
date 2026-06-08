@@ -44,9 +44,11 @@ export function detectToolVersions(): Record<string, string> {
   const circom = commandVersion("circom");
   const circomspect = commandVersion("circomspect");
   const snarkjs = commandVersion("snarkjs", ["--help"]);
-  if (circom) versions.circom = circom;
-  if (circomspect) versions.circomspect = circomspect;
-  if (snarkjs) versions.snarkjs = snarkjs;
+
+  versions.circom = circom ?? "missing";
+  versions.circomspect = circomspect ?? "missing";
+  versions.snarkjs = snarkjs ?? "missing";
+
   return versions;
 }
 

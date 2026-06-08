@@ -45,12 +45,13 @@ circomspect --version
 snarkjs --help
 ```
 
-Current behavior:
+Current behavior (now always reports status clearly):
 
-- If `circom` is installed and `--compile` is used, CircuitShield compiles temporary `.r1cs`, `.wasm`, and `.sym` artifacts and hashes them.
-- If `snarkjs` is installed, CircuitShield runs `snarkjs r1cs info` on discovered `.r1cs` files.
-- Even without `snarkjs`, CircuitShield performs native R1CS magic-header validation and reports invalid/stale artifacts.
-- If `circomspect` is installed, CircuitShield imports its SARIF findings; otherwise built-in checks still run and the report says Circomspect was not executed.
+- `detectToolVersions()` always returns `circom`, `circomspect`, and `snarkjs` — either with version or `"missing"`.
+- If `circom` is installed and `--compile` is used → temporary artifacts are created.
+- If `snarkjs` is installed → `snarkjs r1cs info` is used for deeper inspection.
+- If `circomspect` is installed → SARIF findings are imported.
+- Missing tools are explicitly shown in reports (e.g. `circom: missing`).
 
 ## Install
 
@@ -58,6 +59,33 @@ Current behavior:
 npm install
 npm run build
 ```
+
+### Recommended Toolchain (for full features)
+
+For complete functionality (artifact compilation, Circomspect analysis, R1CS inspection), install these tools:
+
+**snarkjs** (easiest):
+```powershell
+npm install -g snarkjs
+```
+
+**circom + circomspect** (require Rust):
+
+1. Install Rust: https://rustup.rs/ (Windows installer)
+2. Then run:
+   ```powershell
+   cargo install circom
+   cargo install circomspect
+   ```
+
+After installation, verify:
+```powershell
+circom --version
+circomspect --version
+snarkjs --version
+```
+
+> **Note:** CircuitShield works without these tools, but `--compile` and Circomspect rules will be skipped with clear "missing" status in reports.
 
 ## Run UI
 
