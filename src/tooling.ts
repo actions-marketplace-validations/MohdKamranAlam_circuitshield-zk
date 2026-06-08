@@ -34,10 +34,17 @@ export type ZkToolName = "circom" | "circomspect" | "snarkjs";
 export interface ResolvedTool {
   name: ZkToolName;
   command: string;
+  argsPrefix?: string[];
   available: boolean;
   version?: string;
   reason: string;
   checked: string[];
+}
+
+interface ToolCandidate {
+  command: string;
+  argsPrefix?: string[];
+  display: string;
 }
 
 const TOOL_ENV: Record<ZkToolName, string> = {
@@ -96,17 +103,18 @@ export function resolveTool(name: ZkToolName): ResolvedTool {
   if (cached) return cached;
   const args = VERSION_ARGS[name];
   const candidates = toolCandidates(name);
-  for (const command of candidates) {
-    const result = runToolCommand(command, args);
+  for (const candidate of candidates) {
+    const result = runToolCommand(candidate.command, args, candidate.argsPrefix);
     if (result.status === 0) {
       const version = (result.stdout || result.stderr || "").trim().split(/\r?\n/)[0]?.slice(0, 160) || "available";
       const resolved = {
         name,
-        command,
+        command: candidate.command,
+        argsPrefix: candidate.argsPrefix,
         available: true,
         version,
-        reason: command === name ? "found on PATH" : `found at ${command}`,
-        checked: candidates,
+        reason: candidate.display === name ? "found on PATH" : `found at ${candidate.display}`,
+        checked: candidates.map((item) => item.display),
       };
       resolvedToolCache.set(name, resolved);
       return resolved;
@@ -116,8 +124,8 @@ export function resolveTool(name: ZkToolName): ResolvedTool {
     name,
     command: name,
     available: false,
-    reason: `${name} binary not found. Checked: ${candidates.join(", ")}`,
-    checked: candidates,
+    reason: `${name} binary not found. Checked: ${candidates.map((item) => item.display).join(", ")}`,
+    checked: candidates.map((item) => item.display),
   };
   resolvedToolCache.set(name, resolved);
   return resolved;
@@ -137,7 +145,7 @@ export async function runCircomspect(root: string, circomFiles: string[]): Promi
       const absolute = toAbsolute(root, file);
       const result = spawnSync(
         tool.command,
-        [absolute, "--sarif-file", sarifPath],
+        [...(tool.argsPrefix ?? []), absolute, "--sarif-file", sarifPath],
         spawnOptions(tool.command)
       );
       if (result.status !== 0 && result.stderr) {
@@ -211,7 +219,7 @@ export async function compileCircomArtifacts(root: string, circuits: CircuitConf
       await mkdir(outputDir, { recursive: true });
       const result = spawnSync(
         tool.command,
-        [absolute, "--r1cs", "--wasm", "--sym", "-o", outputDir],
+        [...(tool.argsPrefix ?? []), absolute, "--r1cs", "--wasm", "--sym", "-o", outputDir],
         spawnOptions(tool.command)
       );
       if (result.status !== 0) {
@@ -317,7 +325,7 @@ export async function inspectProofArtifacts(root: string, artifactFiles: string[
     let status = native.status;
 
     if (snarkjsAvailable) {
-      const result = spawnSync(snarkjsTool.command, ["r1cs", "info", absolute], spawnOptions(snarkjsTool.command));
+      const result = spawnSync(snarkjsTool.command, [...(snarkjsTool.argsPrefix ?? []), "r1cs", "info", absolute], spawnOptions(snarkjsTool.command));
       snarkjsExecuted = true;
       if (result.status === 0) {
         snarkjsSucceeded = true;
@@ -369,8 +377,8 @@ export async function inspectProofArtifacts(root: string, artifactFiles: string[
   return { inspections, findings, snarkjsExecuted, snarkjsSucceeded, snarkjsReason };
 }
 
-function runToolCommand(command: string, args: string[]) {
-  return spawnSync(command, args, spawnOptions(command));
+function runToolCommand(command: string, args: string[], argsPrefix: string[] = []) {
+  return spawnSync(command, [...argsPrefix, ...args], spawnOptions(command));
 }
 
 function spawnOptions(command: string) {
@@ -415,16 +423,28 @@ function commonToolDirs(): string[] {
   return cachedCommonToolDirs;
 }
 
-function toolCandidates(name: ZkToolName): string[] {
-  const candidates: string[] = [];
+function toolCandidates(name: ZkToolName): ToolCandidate[] {
+  const candidates: ToolCandidate[] = [];
   const envValue = process.env[TOOL_ENV[name]];
-  if (envValue) candidates.push(envValue);
-  candidates.push(name);
+  if (envValue) candidates.push({ command: envValue, display: envValue });
+  candidates.push({ command: name, display: name });
   for (const dir of commonToolDirs()) {
-    candidates.push(path.join(dir, executableName(name)));
-    if (process.platform === "win32") candidates.push(path.join(dir, `${name}.cmd`), path.join(dir, `${name}.exe`));
+    candidates.push({ command: path.join(dir, executableName(name)), display: path.join(dir, executableName(name)) });
+    if (process.platform === "win32") {
+      candidates.push(
+        { command: path.join(dir, `${name}.cmd`), display: path.join(dir, `${name}.cmd`) },
+        { command: path.join(dir, `${name}.exe`), display: path.join(dir, `${name}.exe`) },
+      );
+    }
   }
-  return Array.from(new Set(candidates.filter((candidate) => candidate === name || existsSync(candidate))));
+  if (name === "snarkjs") candidates.push(...snarkjsNodeCliCandidates());
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.command}:${candidate.argsPrefix?.join(" ") ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return candidate.display === name || existsSync(candidate.command) || Boolean(candidate.argsPrefix?.every((file) => existsSync(file)));
+  });
 }
 
 function executableName(name: ZkToolName): string {
@@ -451,6 +471,25 @@ function npmCommandOutput(args: string[]): string | undefined {
   });
   if (result.status !== 0) return undefined;
   return result.stdout.trim().split(/\r?\n/)[0];
+}
+
+function snarkjsNodeCliCandidates(): ToolCandidate[] {
+  const candidates: ToolCandidate[] = [];
+  const cliFiles = [
+    path.join(process.cwd(), "node_modules", "snarkjs", "build", "cli.cjs"),
+  ];
+  const globalRoot = npmCommandOutput(["root", "-g"]);
+  if (globalRoot) cliFiles.push(path.join(globalRoot, "snarkjs", "build", "cli.cjs"));
+  for (const cliFile of cliFiles) {
+    if (existsSync(cliFile)) {
+      candidates.push({
+        command: process.execPath,
+        argsPrefix: [cliFile],
+        display: cliFile,
+      });
+    }
+  }
+  return candidates;
 }
 
 function inspectR1csHeader(buffer: Buffer): { status: ArtifactInspection["status"]; detail: string; metadata: Record<string, unknown> } {
