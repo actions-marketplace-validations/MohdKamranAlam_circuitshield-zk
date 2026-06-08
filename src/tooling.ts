@@ -52,6 +52,9 @@ const VERSION_ARGS: Record<ZkToolName, string[]> = {
   snarkjs: ["--help"],
 };
 
+let cachedCommonToolDirs: string[] | undefined;
+const resolvedToolCache = new Map<ZkToolName, ResolvedTool>();
+
 export function isCommandAvailable(command: string, args = ["--version"]): boolean {
   const result = runToolCommand(command, args);
   return result.status === 0;
@@ -89,13 +92,15 @@ export function isSnarkjsAvailable(): boolean {
 }
 
 export function resolveTool(name: ZkToolName): ResolvedTool {
+  const cached = resolvedToolCache.get(name);
+  if (cached) return cached;
   const args = VERSION_ARGS[name];
   const candidates = toolCandidates(name);
   for (const command of candidates) {
     const result = runToolCommand(command, args);
     if (result.status === 0) {
       const version = (result.stdout || result.stderr || "").trim().split(/\r?\n/)[0]?.slice(0, 160) || "available";
-      return {
+      const resolved = {
         name,
         command,
         available: true,
@@ -103,15 +108,19 @@ export function resolveTool(name: ZkToolName): ResolvedTool {
         reason: command === name ? "found on PATH" : `found at ${command}`,
         checked: candidates,
       };
+      resolvedToolCache.set(name, resolved);
+      return resolved;
     }
   }
-  return {
+  const resolved = {
     name,
     command: name,
     available: false,
     reason: `${name} binary not found. Checked: ${candidates.join(", ")}`,
     checked: candidates,
   };
+  resolvedToolCache.set(name, resolved);
+  return resolved;
 }
 
 export async function runCircomspect(root: string, circomFiles: string[]): Promise<CircomspectRunResult> {
@@ -369,6 +378,7 @@ function spawnOptions(command: string) {
     encoding: "utf8" as const,
     shell: process.platform === "win32" && !looksLikePath(command),
     env: { ...process.env, PATH: augmentedPath() },
+    timeout: 3000,
   };
 }
 
@@ -385,9 +395,11 @@ function augmentedPath(): string {
 }
 
 function commonToolDirs(): string[] {
+  if (cachedCommonToolDirs) return cachedCommonToolDirs;
   const dirs: string[] = [];
   const home = os.homedir();
   const cwd = process.cwd();
+  dirs.push(path.dirname(process.execPath));
   if (home) {
     dirs.push(path.join(home, ".cargo", "bin"));
     dirs.push(path.join(home, ".local", "bin"));
@@ -397,8 +409,10 @@ function commonToolDirs(): string[] {
   if (process.env.CARGO_HOME) dirs.push(path.join(process.env.CARGO_HOME, "bin"));
   if (process.env.NPM_CONFIG_PREFIX) dirs.push(path.join(process.env.NPM_CONFIG_PREFIX, "bin"));
   if (process.env.APPDATA) dirs.push(path.join(process.env.APPDATA, "npm"));
+  dirs.push(...npmGlobalToolDirs());
   dirs.push(path.join(cwd, "node_modules", ".bin"));
-  return dirs;
+  cachedCommonToolDirs = Array.from(new Set(dirs));
+  return cachedCommonToolDirs;
 }
 
 function toolCandidates(name: ZkToolName): string[] {
@@ -415,6 +429,28 @@ function toolCandidates(name: ZkToolName): string[] {
 
 function executableName(name: ZkToolName): string {
   return process.platform === "win32" ? `${name}.exe` : name;
+}
+
+function npmGlobalToolDirs(): string[] {
+  const dirs: string[] = [];
+  const bin = npmCommandOutput(["bin", "-g"]);
+  if (bin) dirs.push(bin);
+  const prefix = npmCommandOutput(["prefix", "-g"]);
+  if (prefix) {
+    dirs.push(process.platform === "win32" ? prefix : path.join(prefix, "bin"));
+  }
+  return dirs;
+}
+
+function npmCommandOutput(args: string[]): string | undefined {
+  const result = spawnSync("npm", args, {
+    encoding: "utf8",
+    shell: process.platform === "win32",
+    env: process.env,
+    timeout: 3000,
+  });
+  if (result.status !== 0) return undefined;
+  return result.stdout.trim().split(/\r?\n/)[0];
 }
 
 function inspectR1csHeader(buffer: Buffer): { status: ArtifactInspection["status"]; detail: string; metadata: Record<string, unknown> } {
