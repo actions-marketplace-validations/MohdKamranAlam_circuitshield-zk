@@ -8,6 +8,16 @@ export function renderMarkdown(result: ScanResult): string {
   lines.push(`Scanned at: ${result.scannedAt}`);
   lines.push(`Audit Gate: **${result.auditGate.state}**`);
   lines.push("");
+  lines.push("## Executive Summary");
+  lines.push("");
+  lines.push(`- Gate decision: **${result.auditGate.state}**`);
+  lines.push(`- Recommended action: ${recommendedAction(result.auditGate.state)}`);
+  lines.push(`- Baseline status: ${result.toolStatus.baselineLoaded ? `loaded (${result.baselineRef ?? "unnamed"})` : "not loaded; protocol drift cannot be fully assessed"}`);
+  lines.push(`- Config status: ${result.toolStatus.configLoaded ? `loaded${result.configPath ? ` (${result.configPath})` : ""}` : "not loaded; run `circuitshield init` and declare project invariants"}`);
+  lines.push(`- Scope discovered: ${result.snapshots.circuits.length} circuit(s), ${result.snapshots.verifiers.length} verifier(s), ${Object.keys(result.snapshots.artifactHashes).length} tracked artifact/source file(s)`);
+  lines.push(`- Findings: ${findingSummary(result)}`);
+  lines.push(`- Top review item: ${topReviewItem(result)}`);
+  lines.push("");
   lines.push("## Metrics");
   lines.push("");
   lines.push(`- Protocol Drift Risk: ${result.metrics.protocolDriftStatus === "unknown" ? "N/A (no baseline loaded)" : `${result.metrics.protocolDriftIndex}/100`}`);
@@ -146,9 +156,36 @@ function tableCell(value: string): string {
 }
 
 function cleanText(value: string): string {
-  return stripAnsi(value).replace(/\s+/g, " ").trim();
+  return stripAnsi(value)
+    .replace(/\s+at\s+.*node_modules.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function stripAnsi(value: string): string {
   return value.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function recommendedAction(state: string): string {
+  if (state === "PASS") return "No blocking drift was detected by configured checks; keep normal review.";
+  if (state === "WARN") return "Review warnings before release; CI may continue depending on policy.";
+  if (state === "MANUAL_REVIEW") return "Require maintainer or auditor review before release.";
+  if (state === "REBASELINE_REQUIRED") return "Create or approve a new trusted baseline before relying on drift results.";
+  return "Block CI/release until the listed circuit, verifier, artifact, or baseline issues are resolved.";
+}
+
+function findingSummary(result: ScanResult): string {
+  const counts = new Map<string, number>();
+  for (const finding of result.findings) counts.set(finding.severity, (counts.get(finding.severity) ?? 0) + 1);
+  return ["critical", "high", "medium", "low", "info"]
+    .map((severity) => `${counts.get(severity) ?? 0} ${severity}`)
+    .join(", ");
+}
+
+function topReviewItem(result: ScanResult): string {
+  const priority = ["critical", "high", "medium", "low", "info"];
+  const finding = [...result.findings].sort((a, b) => priority.indexOf(a.severity) - priority.indexOf(b.severity))[0];
+  if (!finding) return "No configured findings were detected.";
+  const location = finding.file ? ` at ${finding.file}${finding.line ? `:${finding.line}` : ""}` : "";
+  return `${finding.severity.toUpperCase()} - ${finding.title}${location}`;
 }

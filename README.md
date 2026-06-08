@@ -112,6 +112,34 @@ npm install
 npm run build
 ```
 
+## Quick Start On A Real Repo
+
+From the root of a ZK/Circom repository:
+
+```powershell
+npx circuitshield init
+```
+
+`init` discovers Circom circuits and verifier-like Solidity contracts, then creates a starter `circuitshield.yml`. Review the generated config and add project-specific invariants before relying on gate decisions.
+
+Create a trusted baseline from the last audited or reviewed commit:
+
+```powershell
+npx circuitshield baseline create --ref audited-v1.0.0 --target . --config circuitshield.yml
+```
+
+Scan the current release candidate against that baseline:
+
+```powershell
+npx circuitshield scan . --config circuitshield.yml --baseline audited-v1.0.0 --format markdown --out circuitshield-report.md
+```
+
+Use CI mode to block risky releases:
+
+```powershell
+npx circuitshield ci . --config circuitshield.yml --baseline audited-v1.0.0 --fail-on manual
+```
+
 Quick health check:
 
 ```powershell

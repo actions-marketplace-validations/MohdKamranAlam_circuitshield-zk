@@ -18,7 +18,7 @@
     "baseline:example": "tsx src/cli.ts baseline create --ref audited-v1.0.0 --target examples --config examples/circuitshield.yml",
     "benchmark": "tsx src/cli.ts benchmark benchmarks",
     "demo:baseline": "tsx src/cli.ts demo baseline-drift",
-    "test": "npm run build && node dist/cli.js scan examples --config examples/circuitshield.yml --format json --out .tmp/scan.json && node dist/cli.js benchmark benchmarks --format json --out .tmp/benchmark.json && npm run web:build"
+    "test": "npm run build && node tests/init-and-report.test.mjs && node dist/cli.js scan examples --config examples/circuitshield.yml --format json --out .tmp/scan.json && node dist/cli.js benchmark benchmarks --format json --out .tmp/benchmark.json && npm run web:build"
   },
   "keywords": [
     "zk",

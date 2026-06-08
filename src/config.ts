@@ -1,7 +1,9 @@
 import { promises as fs } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
-import type { ProjectConfig } from "./types.js";
+import { discoverRepo } from "./discovery.js";
+import type { CircuitConfig, ProjectConfig, VerifierConfig } from "./types.js";
 import { pathExists } from "./utils.js";
 
 export const DEFAULT_CONFIG_NAME = "circuitshield.yml";
@@ -46,73 +48,89 @@ export async function loadConfig(root: string, explicitPath?: string): Promise<{
 export async function writeDefaultConfig(root: string): Promise<string> {
   const target = path.join(root, DEFAULT_CONFIG_NAME);
   if (await pathExists(target)) return target;
-  const body = `version: 1
-
-project:
-  name: example-zk-protocol
-  baseline:
-    type: git
-    ref: audited-v1.0.0
-
-policy:
-  fail_on:
-    - critical_finding
-    - critical_invariant_coverage_drop
-  require_manual_review:
-    - verifier_key_change
-    - public_input_binding_change
-      - baseline_missing
-
-suppressions: []
-
-circuits:
-  - id: withdraw
-    path: circuits/withdraw.circom
-    framework: circom
-    verifier: contracts/WithdrawVerifier.sol
-    public_inputs:
-      - merkleRoot
-      - nullifierHash
-      - recipient
-      - amount
-      - chainId
-      - assetId
-    invariants:
-      - id: merkle_membership
-        type: merkle_membership
-        root: merkleRoot
-        severity: critical
-      - id: nullifier_unique
-        type: nullifier_unique
-        signal: nullifierHash
-        severity: critical
-      - id: value_conservation
-        type: value_conservation
-        severity: critical
-      - id: amount_range
-        type: range_bound
-        signal: amount
-        bits: 64
-        severity: high
-      - id: domain_binding
-        type: domain_binding
-        signals:
-          - chainId
-          - assetId
-        severity: high
-
-verifiers:
-  - id: withdraw_verifier
-    contract: contracts/WithdrawVerifier.sol
-    circuit: withdraw
-    public_input_order:
-      - merkleRoot
-      - nullifierHash
-      - recipient
-      - amount
-      - chainId
-      - assetId
-`;
+  const body = await buildStarterConfig(root);
   await fs.writeFile(target, body, "utf8");
   return target;
+}
+
+export async function buildStarterConfig(root: string): Promise<string> {
+  const repo = await discoverRepo(root);
+  const circuits = repo.circomFiles.map((file, index): CircuitConfig => {
+    const publicInputs = inferPublicInputsFromFile(path.join(root, file));
+    const id = toId(path.basename(file, ".circom"), index);
+    return {
+      id,
+      path: file,
+      framework: "circom",
+      ...(publicInputs.length ? { public_inputs: publicInputs } : {}),
+      invariants: [
+        { id: `${id}_public_input_binding`, type: "domain_binding", signals: publicInputs.slice(0, 2), severity: "medium" as const },
+      ].filter((invariant) => invariant.signals && invariant.signals.length > 0),
+    };
+  });
+  const verifiers = repo.solidityFiles
+    .filter((file) => /verifier/i.test(file))
+    .map((file, index): VerifierConfig => ({
+      id: toId(path.basename(file, ".sol"), index),
+      contract: file,
+      ...(circuits[index] ? { circuit: circuits[index].id, public_input_order: [...(circuits[index].public_inputs ?? [])] } : {}),
+    }));
+
+  const config: ProjectConfig = {
+    version: 1,
+    project: {
+      name: path.basename(root),
+      baseline: {
+        type: "git",
+        ref: "audited-v1.0.0",
+      },
+    },
+    policy: {
+      fail_on: ["critical_finding", "critical_invariant_coverage_drop"],
+      require_manual_review: ["verifier_key_change", "public_input_binding_change", "baseline_missing"],
+    },
+    suppressions: [],
+    circuits: circuits.length ? circuits : [
+      {
+        id: "main",
+        path: "circuits/main.circom",
+        framework: "circom",
+        public_inputs: ["publicInput"],
+        invariants: [
+          {
+            id: "public_input_binding",
+            type: "domain_binding",
+            signals: ["publicInput"],
+            severity: "high",
+          },
+        ],
+      },
+    ],
+    verifiers,
+  };
+
+  return YAML.stringify(config, { aliasDuplicateObjects: false });
+}
+
+function inferPublicInputsFromFile(file: string): string[] {
+  try {
+    const content = readFileSync(file, "utf8");
+    const match = content.match(/component\s+main\s*\{\s*public\s*\[([^\]]*)\]/m);
+    if (!match) return [];
+    return match[1]
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function toId(name: string, index: number): string {
+  const id = name
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+  return id || `item_${index + 1}`;
 }

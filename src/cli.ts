@@ -23,13 +23,28 @@ program
 
 program
   .command("init")
-  .description("Create a starter circuitshield.yml file.")
+  .description("Create a starter circuitshield.yml file from discovered circuits and verifiers.")
   .option("-t, --target <path>", "Project root", ".")
-  .action(async (options: { target: string }) => {
+  .option("--force", "Overwrite an existing circuitshield.yml")
+  .action(async (options: { target: string; force?: boolean }) => {
     const root = path.resolve(options.target);
     await fs.mkdir(root, { recursive: true });
+    const existing = await findConfig(root);
+    if (existing && !options.force) {
+      console.log(`Config already exists: ${existing}`);
+      console.log("Use --force to regenerate it.");
+      return;
+    }
+    if (existing && options.force) await fs.rm(existing);
     const configPath = await writeDefaultConfig(root);
     console.log(`Created ${configPath}`);
+    console.log("");
+    console.log("Next steps:");
+    console.log(`1. Review ${path.relative(root, configPath) || "circuitshield.yml"} and add project-specific invariants.`);
+    console.log("2. Create a trusted baseline from the last audited commit:");
+    console.log("   circuitshield baseline create --ref audited-v1.0.0 --target . --config circuitshield.yml");
+    console.log("3. Scan the current release candidate:");
+    console.log("   circuitshield scan . --config circuitshield.yml --baseline audited-v1.0.0 --format markdown --out circuitshield-report.md");
   });
 
 program
