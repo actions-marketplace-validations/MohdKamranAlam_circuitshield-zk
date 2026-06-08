@@ -1,0 +1,5 @@
+{
+  "id": "unsafe-verifier-replay",
+  "expectedGate": "MANUAL_REVIEW",
+  "expectedFindingIds": ["nullifier_reuse_not_rejected"]
+}

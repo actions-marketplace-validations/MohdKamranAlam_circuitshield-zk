@@ -1,0 +1,5 @@
+{
+  "id": "critical-missing-nullifier",
+  "expectedGate": "BLOCK_CI",
+  "expectedFindingIds": ["invariant_nullifier_missing"]
+}

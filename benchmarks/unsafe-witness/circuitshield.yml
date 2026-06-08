@@ -1,0 +1,15 @@
+version: 1
+project:
+  name: unsafe-witness
+circuits:
+  - id: unsafe
+    path: circuits/unsafe.circom
+    framework: circom
+    public_inputs:
+      - out
+    invariants:
+      - id: out_range
+        type: range_bound
+        signal: out
+        bits: 64
+        severity: high

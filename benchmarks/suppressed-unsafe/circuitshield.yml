@@ -1,0 +1,13 @@
+version: 1
+project:
+  name: suppressed-unsafe
+suppressions:
+  - id: declared_public_input_unbound
+    file: circuits/suppressed.circom
+    reason: Demo suppression for benchmark only; real projects must justify this with a parent circuit binding.
+circuits:
+  - id: suppressed
+    path: circuits/suppressed.circom
+    framework: circom
+    public_inputs:
+      - out

@@ -1,0 +1,5 @@
+{
+  "id": "weak-domain-binding",
+  "expectedGate": "MANUAL_REVIEW",
+  "expectedFindingIds": ["invariant_domain_binding_weak"]
+}

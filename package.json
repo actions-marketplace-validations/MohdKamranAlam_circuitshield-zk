@@ -1,0 +1,51 @@
+{
+  "name": "circuitshield",
+  "version": "0.1.0",
+  "description": "Post-audit invariant drift monitoring and audit gate for ZK circuits.",
+  "type": "module",
+  "bin": {
+    "circuitshield": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "api": "tsx src/server.ts",
+    "api:built": "node dist/server.js",
+    "web:dev": "vite --config web/vite.config.js",
+    "web:build": "vite build --config web/vite.config.js",
+    "app:build": "npm run build && npm run web:build",
+    "scan:example": "tsx src/cli.ts scan examples --config examples/circuitshield.yml --format markdown",
+    "baseline:example": "tsx src/cli.ts baseline create --ref audited-v1.0.0 --target examples --config examples/circuitshield.yml",
+    "benchmark": "tsx src/cli.ts benchmark benchmarks",
+    "demo:baseline": "tsx src/cli.ts demo baseline-drift",
+    "test": "npm run build && node dist/cli.js scan examples --config examples/circuitshield.yml --format json --out .tmp/scan.json && node dist/cli.js benchmark benchmarks --format json --out .tmp/benchmark.json && npm run web:build"
+  },
+  "keywords": [
+    "zk",
+    "circom",
+    "audit",
+    "security",
+    "zero-knowledge"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "lucide-react": "^0.468.0",
+    "pg": "^8.13.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "yaml": "^2.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/pg": "^8.11.11",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

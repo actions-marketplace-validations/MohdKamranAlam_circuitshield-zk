@@ -1,0 +1,5 @@
+{
+  "id": "ignored-verifier-proof",
+  "expectedGate": "MANUAL_REVIEW",
+  "expectedFindingIds": ["verify_proof_result_weakly_enforced"]
+}

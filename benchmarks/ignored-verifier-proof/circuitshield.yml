@@ -1,0 +1,16 @@
+version: 1
+project:
+  name: ignored-verifier-proof
+circuits:
+  - id: simple
+    path: circuits/simple.circom
+    framework: circom
+    verifier: contracts/Verifier.sol
+    public_inputs:
+      - out
+verifiers:
+  - id: verifier
+    contract: contracts/Verifier.sol
+    circuit: simple
+    public_input_order:
+      - out

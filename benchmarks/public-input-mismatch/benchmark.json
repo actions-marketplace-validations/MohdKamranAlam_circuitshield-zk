@@ -1,0 +1,5 @@
+{
+  "id": "public-input-mismatch",
+  "expectedGate": "MANUAL_REVIEW",
+  "expectedFindingIds": ["declared_public_input_not_public"]
+}

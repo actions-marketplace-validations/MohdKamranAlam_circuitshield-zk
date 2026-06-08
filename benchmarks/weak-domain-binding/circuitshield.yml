@@ -1,0 +1,17 @@
+version: 1
+project:
+  name: weak-domain-binding
+circuits:
+  - id: domain
+    path: circuits/domain.circom
+    framework: circom
+    public_inputs:
+      - chainId
+      - assetId
+    invariants:
+      - id: domain_binding
+        type: domain_binding
+        signals:
+          - chainId
+          - assetId
+        severity: high

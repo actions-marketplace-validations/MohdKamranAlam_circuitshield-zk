@@ -1,0 +1,21 @@
+version: 1
+project:
+  name: unsafe-verifier-replay
+circuits:
+  - id: replay
+    path: circuits/replay.circom
+    verifier: contracts/Verifier.sol
+    public_inputs:
+      - root
+      - nullifierHash
+    invariants:
+      - id: nullifier_unique
+        type: nullifier_unique
+        signal: nullifierHash
+        severity: critical
+verifiers:
+  - id: replay_verifier
+    contract: contracts/Verifier.sol
+    public_input_order:
+      - root
+      - nullifierHash

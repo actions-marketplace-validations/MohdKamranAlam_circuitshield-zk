@@ -1,0 +1,45 @@
+name: CircuitShield
+description: Post-audit invariant drift monitoring and audit gate for ZK circuits.
+inputs:
+  target:
+    description: Project path to scan.
+    required: false
+    default: "."
+  config:
+    description: Path to circuitshield.yml.
+    required: false
+    default: ""
+  baseline:
+    description: Baseline ref to compare against.
+    required: false
+    default: ""
+  fail-on:
+    description: block, manual, warn, or never.
+    required: false
+    default: "block"
+  report:
+    description: Output report path.
+    required: false
+    default: "circuitshield-report.md"
+  json-report:
+    description: Output JSON report path.
+    required: false
+    default: "circuitshield-report.json"
+  comment:
+    description: Output GitHub PR comment markdown path.
+    required: false
+    default: "circuitshield-comment.md"
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        args=("scan" "${{ inputs.target }}" "--format" "json" "--out" "${{ inputs.json-report }}")
+        if [ -n "${{ inputs.config }}" ]; then args+=("--config" "${{ inputs.config }}"); fi
+        if [ -n "${{ inputs.baseline }}" ]; then args+=("--baseline" "${{ inputs.baseline }}"); fi
+        node "$GITHUB_ACTION_PATH/dist/cli.js" "${args[@]}"
+        node "$GITHUB_ACTION_PATH/dist/cli.js" comment --scan "${{ inputs.json-report }}" --out "${{ inputs.comment }}"
+        ci_args=("ci" "${{ inputs.target }}" "--fail-on" "${{ inputs.fail-on }}" "--format" "markdown" "--out" "${{ inputs.report }}")
+        if [ -n "${{ inputs.config }}" ]; then ci_args+=("--config" "${{ inputs.config }}"); fi
+        if [ -n "${{ inputs.baseline }}" ]; then ci_args+=("--baseline" "${{ inputs.baseline }}"); fi
+        node "$GITHUB_ACTION_PATH/dist/cli.js" "${ci_args[@]}"

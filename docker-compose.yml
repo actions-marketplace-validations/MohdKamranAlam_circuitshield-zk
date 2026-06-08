@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: circuitshield
+      POSTGRES_USER: circuitshield_owner
+      POSTGRES_PASSWORD: circuitshield_local_password
+    ports:
+      - "55432:5432"
+    volumes:
+      - circuitshield_postgres:/var/lib/postgresql/data
+
+  circuitshield-api:
+    image: circuitshield:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["node", "/opt/circuitshield/dist/server.js"]
+    working_dir: /workspace
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./:/workspace
+    environment:
+      CIRCUITSHIELD_API_PORT: "8787"
+      DB_ENGINE: postgresql
+      DATABASE_URL: postgresql://circuitshield_owner:circuitshield_local_password@postgres:5432/circuitshield?sslmode=disable
+    depends_on:
+      - postgres
+
+  circuitshield-scan:
+    image: circuitshield:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    command: ["scan", "examples", "--config", "examples/circuitshield.yml"]
+
+volumes:
+  circuitshield_postgres:

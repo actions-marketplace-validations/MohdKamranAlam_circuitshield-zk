@@ -1,0 +1,23 @@
+version: 1
+project:
+  name: critical-missing-nullifier
+circuits:
+  - id: withdraw
+    path: circuits/withdraw.circom
+    framework: circom
+    verifier: contracts/Verifier.sol
+    public_inputs:
+      - merkleRoot
+      - nullifierHash
+    invariants:
+      - id: nullifier_unique
+        type: nullifier_unique
+        signal: nullifierHash
+        severity: critical
+verifiers:
+  - id: verifier
+    contract: contracts/Verifier.sol
+    circuit: withdraw
+    public_input_order:
+      - merkleRoot
+      - nullifierHash

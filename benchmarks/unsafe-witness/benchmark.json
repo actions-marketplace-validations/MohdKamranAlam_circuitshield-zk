@@ -1,0 +1,5 @@
+{
+  "id": "unsafe-witness",
+  "expectedGate": "MANUAL_REVIEW",
+  "expectedFindingIds": ["unsafe_witness_assignment"]
+}

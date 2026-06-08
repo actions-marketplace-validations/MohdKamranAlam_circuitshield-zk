@@ -1,0 +1,12 @@
+{
+  "id": "safe-withdraw",
+  "expectedGate": "PASS",
+  "selfBaseline": true,
+  "forbiddenFindingIds": [
+    "unsafe_witness_assignment",
+    "invariant_merkle_membership_weak",
+    "invariant_range_bound_uncovered",
+    "verify_proof_result_weakly_enforced",
+    "nullifier_reuse_not_rejected"
+  ]
+}

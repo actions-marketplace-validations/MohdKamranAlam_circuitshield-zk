@@ -1,0 +1,16 @@
+version: 1
+project:
+  name: public-input-mismatch
+circuits:
+  - id: mismatch
+    path: circuits/mismatch.circom
+    framework: circom
+    public_inputs:
+      - root
+      - nullifierHash
+      - chainId
+    invariants:
+      - id: nullifier_unique
+        type: nullifier_unique
+        signal: nullifierHash
+        severity: critical

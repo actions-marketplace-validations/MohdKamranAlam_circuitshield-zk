@@ -1,0 +1,342 @@
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import type { ArtifactInspection, CircuitConfig, Finding } from "./types.js";
+import { normalizePath, sha256File, toAbsolute } from "./utils.js";
+
+export interface CircomspectRunResult {
+  findings: Finding[];
+  executed: boolean;
+  succeeded: boolean;
+  reason: string;
+}
+
+export interface CircomCompileResult {
+  hashes: Record<string, string>;
+  findings: Finding[];
+  executed: boolean;
+  succeeded: boolean;
+  reason: string;
+}
+
+export interface ArtifactInspectionResult {
+  inspections: ArtifactInspection[];
+  findings: Finding[];
+  snarkjsExecuted: boolean;
+  snarkjsSucceeded: boolean;
+  snarkjsReason: string;
+}
+
+export function isCommandAvailable(command: string, args = ["--version"]): boolean {
+  const result = spawnSync(command, args, { encoding: "utf8", shell: process.platform === "win32" });
+  return result.status === 0;
+}
+
+export function commandVersion(command: string, args = ["--version"]): string | undefined {
+  const result = spawnSync(command, args, { encoding: "utf8", shell: process.platform === "win32" });
+  if (result.status !== 0) return undefined;
+  return (result.stdout || result.stderr || "").trim().split(/\r?\n/)[0]?.slice(0, 160) || "available";
+}
+
+export function detectToolVersions(): Record<string, string> {
+  const versions: Record<string, string> = {};
+  const circom = commandVersion("circom");
+  const circomspect = commandVersion("circomspect");
+  const snarkjs = commandVersion("snarkjs", ["--help"]);
+  if (circom) versions.circom = circom;
+  if (circomspect) versions.circomspect = circomspect;
+  if (snarkjs) versions.snarkjs = snarkjs;
+  return versions;
+}
+
+export function isCircomspectAvailable(): boolean {
+  return isCommandAvailable("circomspect");
+}
+
+export function isCircomAvailable(): boolean {
+  return isCommandAvailable("circom");
+}
+
+export function isSnarkjsAvailable(): boolean {
+  return isCommandAvailable("snarkjs", ["--help"]);
+}
+
+export async function runCircomspect(root: string, circomFiles: string[]): Promise<CircomspectRunResult> {
+  if (!isCircomspectAvailable()) return { findings: [], executed: false, succeeded: false, reason: "circomspect binary not found on PATH" };
+  if (!circomFiles.length) return { findings: [], executed: false, succeeded: false, reason: "no Circom circuits discovered" };
+  const findings: Finding[] = [];
+  let succeeded = true;
+  let reason = "executed";
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "circuitshield-"));
+  try {
+    for (const file of circomFiles) {
+      const sarifPath = path.join(tempDir, `${path.basename(file)}.sarif.json`);
+      const absolute = toAbsolute(root, file);
+      const result = spawnSync(
+        "circomspect",
+        [absolute, "--sarif-file", sarifPath],
+        { encoding: "utf8", shell: process.platform === "win32" }
+      );
+      if (result.status !== 0 && result.stderr) {
+        succeeded = false;
+        reason = result.stderr.trim().slice(0, 500);
+        findings.push({
+          id: "circomspect_run_failed",
+          title: "Circomspect run failed",
+          severity: "info",
+          category: "tooling",
+          source: "circomspect",
+          file,
+          message: result.stderr.trim().slice(0, 500),
+          recommendation: "Run circomspect locally to inspect the complete output.",
+        });
+        continue;
+      }
+      const raw = await readFile(sarifPath, "utf8").catch(() => "");
+      if (!raw) {
+        reason = "executed; no SARIF output was produced";
+        continue;
+      }
+      const parsed = JSON.parse(raw) as {
+        runs?: Array<{ results?: Array<{ ruleId?: string; message?: { text?: string }; locations?: Array<{ physicalLocation?: { region?: { startLine?: number } } }> }> }>;
+      };
+      for (const sarifFinding of parsed.runs?.flatMap((run) => run.results ?? []) ?? []) {
+        findings.push({
+          id: sarifFinding.ruleId ?? "circomspect_finding",
+          title: sarifFinding.ruleId ?? "Circomspect finding",
+          severity: "medium",
+          category: "static",
+          source: "circomspect",
+          file: normalizePath(file),
+          line: sarifFinding.locations?.[0]?.physicalLocation?.region?.startLine,
+          message: sarifFinding.message?.text ?? "Circomspect reported a finding.",
+          recommendation: "Review the Circomspect finding and add a suppression only with a clear reason.",
+        });
+      }
+    }
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+  return { findings, executed: true, succeeded, reason };
+}
+
+export async function compileCircomArtifacts(root: string, circuits: CircuitConfig[]): Promise<CircomCompileResult> {
+  const findings: Finding[] = [];
+  const hashes: Record<string, string> = {};
+  if (!circuits.length) return { hashes, findings, executed: false, succeeded: false, reason: "no Circom circuits discovered" };
+  if (!isCircomAvailable()) {
+    findings.push({
+      id: "circom_compiler_missing",
+      title: "Circom compiler is not available",
+      severity: "info",
+      category: "tooling",
+      source: "circom-compiler",
+      message: "Compiler artifact extraction was requested, but 'circom' was not found on PATH.",
+      recommendation: "Install Circom 2 to enable compiled R1CS/WASM/SYM artifact drift tracking.",
+    });
+    return { hashes, findings, executed: false, succeeded: false, reason: "circom binary not found on PATH" };
+  }
+
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "circuitshield-compile-"));
+  let succeeded = true;
+  let reason = "executed";
+  try {
+    for (const circuit of circuits) {
+      const outputDir = path.join(tempRoot, circuit.id);
+      const absolute = toAbsolute(root, circuit.path);
+      const result = spawnSync(
+        "circom",
+        [absolute, "--r1cs", "--wasm", "--sym", "-o", outputDir],
+        { encoding: "utf8", shell: process.platform === "win32" }
+      );
+      if (result.status !== 0) {
+        succeeded = false;
+        reason = (result.stderr || result.stdout || "Circom compilation failed.").trim().slice(0, 800);
+        findings.push({
+          id: "circom_compile_failed",
+          title: "Circom compile failed",
+          severity: "high",
+          category: "tooling",
+          source: "circom-compiler",
+          file: circuit.path,
+          message: (result.stderr || result.stdout || "Circom compilation failed.").trim().slice(0, 800),
+          recommendation: "Fix circuit compilation before treating drift results as release-ready.",
+          gateImpact: "MANUAL_REVIEW",
+        });
+        continue;
+      }
+      const files = await listFiles(outputDir);
+      for (const file of files.filter((item) => /\.(r1cs|wasm|sym)$/i.test(item))) {
+        const hash = await sha256File(file);
+        if (!hash) continue;
+        const key = `compiled/${circuit.id}/${normalizePath(path.relative(outputDir, file))}`;
+        hashes[key] = hash;
+      }
+      if (!Object.keys(hashes).some((key) => key.startsWith(`compiled/${circuit.id}/`))) {
+        findings.push({
+          id: "circom_compile_no_artifacts",
+          title: "Circom compile produced no tracked artifacts",
+          severity: "medium",
+          category: "tooling",
+          source: "circom-compiler",
+          file: circuit.path,
+          message: `No .r1cs, .wasm, or .sym artifacts were found after compiling '${circuit.path}'.`,
+          recommendation: "Check compiler output paths and circuit entrypoint.",
+          gateImpact: "WARN",
+        });
+      }
+    }
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+
+  if (!Object.keys(hashes).length && succeeded) {
+    succeeded = false;
+    reason = "circom executed but no tracked .r1cs/.wasm/.sym artifacts were produced";
+  }
+  return { hashes, findings, executed: true, succeeded, reason };
+}
+
+export async function inspectProofArtifacts(root: string, artifactFiles: string[]): Promise<ArtifactInspectionResult> {
+  const findings: Finding[] = [];
+  const inspections: ArtifactInspection[] = [];
+  const snarkjsAvailable = isSnarkjsAvailable();
+  let snarkjsExecuted = false;
+  let snarkjsSucceeded = false;
+  let snarkjsReason = artifactFiles.some((file) => file.toLowerCase().endsWith(".r1cs"))
+    ? "snarkjs binary not found on PATH; native R1CS header validation still ran"
+    : "no R1CS artifacts discovered";
+
+  for (const file of artifactFiles) {
+    const kind = artifactKind(file);
+    const absolute = toAbsolute(root, file);
+    const sha256 = await sha256File(absolute);
+    if (kind !== "r1cs") {
+      inspections.push({
+        path: normalizePath(file),
+        kind,
+        status: sha256 ? "unknown" : "invalid",
+        detail: sha256 ? "Artifact hash is tracked; no native structural inspector is available for this artifact type yet." : "Artifact could not be hashed.",
+        sha256,
+      });
+      continue;
+    }
+
+    const buffer = await readFile(absolute).catch(() => undefined);
+    if (!buffer) {
+      inspections.push({
+        path: normalizePath(file),
+        kind: "r1cs",
+        status: "invalid",
+        detail: "R1CS artifact could not be read.",
+        sha256,
+      });
+      findings.push({
+        id: "r1cs_artifact_unreadable",
+        title: "R1CS artifact is unreadable",
+        severity: "medium",
+        category: "tooling",
+        source: "artifact-inspector",
+        file,
+        message: `R1CS artifact '${file}' could not be read.`,
+        recommendation: "Regenerate and commit the expected proof artifact, or remove stale artifact references.",
+        gateImpact: "WARN",
+      });
+      continue;
+    }
+
+    const native = inspectR1csHeader(buffer);
+    const metadata: Record<string, unknown> = { ...native.metadata };
+    let detail = native.detail;
+    let status = native.status;
+
+    if (snarkjsAvailable) {
+      const result = spawnSync("snarkjs", ["r1cs", "info", absolute], { encoding: "utf8", shell: process.platform === "win32" });
+      snarkjsExecuted = true;
+      if (result.status === 0) {
+        snarkjsSucceeded = true;
+        snarkjsReason = "executed for R1CS artifacts";
+        metadata.snarkjsInfo = result.stdout.trim().slice(0, 2000);
+        detail = `${detail} snarkjs r1cs info executed successfully.`;
+        if (status !== "invalid") status = "valid";
+      } else {
+        metadata.snarkjsError = (result.stderr || result.stdout || "snarkjs failed").trim().slice(0, 800);
+        snarkjsReason = String(metadata.snarkjsError);
+        findings.push({
+          id: "snarkjs_r1cs_info_failed",
+          title: "snarkjs R1CS inspection failed",
+          severity: "medium",
+          category: "tooling",
+          source: "snarkjs",
+          file,
+          message: String(metadata.snarkjsError),
+          recommendation: "Regenerate the R1CS artifact or run 'snarkjs r1cs info' locally for the full error.",
+          gateImpact: "WARN",
+        });
+      }
+    }
+
+    inspections.push({
+      path: normalizePath(file),
+      kind: "r1cs",
+      status,
+      detail,
+      sha256,
+      metadata,
+    });
+
+    if (native.status === "invalid") {
+      findings.push({
+        id: "r1cs_artifact_invalid",
+        title: "R1CS artifact is not structurally valid",
+        severity: "high",
+        category: "tooling",
+        source: "artifact-inspector",
+        file,
+        message: native.detail,
+        recommendation: "Regenerate the R1CS artifact from the audited circuit before relying on artifact drift checks.",
+        gateImpact: "MANUAL_REVIEW",
+      });
+    }
+  }
+
+  return { inspections, findings, snarkjsExecuted, snarkjsSucceeded, snarkjsReason };
+}
+
+function inspectR1csHeader(buffer: Buffer): { status: ArtifactInspection["status"]; detail: string; metadata: Record<string, unknown> } {
+  const magic = buffer.subarray(0, 4).toString("utf8");
+  const metadata: Record<string, unknown> = {
+    sizeBytes: buffer.length,
+    magic,
+  };
+  if (buffer.length < 16) {
+    return { status: "invalid", detail: `R1CS artifact is too small (${buffer.length} bytes).`, metadata };
+  }
+  if (magic !== "r1cs") {
+    return { status: "invalid", detail: `R1CS artifact magic header is '${magic || "empty"}', expected 'r1cs'.`, metadata };
+  }
+  return { status: "valid", detail: "R1CS magic header is valid. Use snarkjs for full constraint/wire counts when available.", metadata };
+}
+
+function artifactKind(file: string): ArtifactInspection["kind"] {
+  const lower = file.toLowerCase();
+  if (lower.endsWith(".r1cs")) return "r1cs";
+  if (lower.endsWith(".wasm")) return "wasm";
+  if (lower.endsWith(".sym")) return "sym";
+  if (lower.endsWith(".zkey")) return "zkey";
+  if (lower.endsWith(".ptau")) return "ptau";
+  if (lower.endsWith("verification_key.json")) return "verification_key";
+  return "unknown";
+}
+
+async function listFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const files: string[] = [];
+  for (const entry of entries) {
+    const absolute = path.join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...await listFiles(absolute));
+    if (entry.isFile()) files.push(absolute);
+  }
+  return files;
+}

@@ -1,0 +1,57 @@
+version: 1
+
+project:
+  name: audited-withdraw-protocol
+
+circuits:
+  - id: withdraw
+    path: circuits/withdraw.circom
+    framework: circom
+    verifier: contracts/WithdrawVerifier.sol
+    public_inputs:
+      - merkleRoot
+      - nullifierHash
+      - recipient
+      - amount
+      - chainId
+      - assetId
+    invariants:
+      - id: merkle_membership
+        type: merkle_membership
+        root: merkleRoot
+        severity: critical
+      - id: nullifier_unique
+        type: nullifier_unique
+        signal: nullifierHash
+        severity: critical
+      - id: value_conservation
+        type: value_conservation
+        inputs:
+          - balance
+        outputs:
+          - amount
+          - change
+        severity: critical
+      - id: amount_range
+        type: range_bound
+        signal: amount
+        bits: 64
+        severity: high
+      - id: domain_binding
+        type: domain_binding
+        signals:
+          - chainId
+          - assetId
+        severity: high
+
+verifiers:
+  - id: withdraw_verifier
+    contract: contracts/WithdrawVerifier.sol
+    circuit: withdraw
+    public_input_order:
+      - merkleRoot
+      - nullifierHash
+      - recipient
+      - amount
+      - chainId
+      - assetId
