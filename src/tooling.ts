@@ -48,7 +48,7 @@ const TOOL_ENV: Record<ZkToolName, string> = {
 
 const VERSION_ARGS: Record<ZkToolName, string[]> = {
   circom: ["--version"],
-  circomspect: ["--version"],
+  circomspect: ["--help"],
   snarkjs: ["--help"],
 };
 
