@@ -29,12 +29,20 @@ export interface ArtifactInspectionResult {
 }
 
 export function isCommandAvailable(command: string, args = ["--version"]): boolean {
-  const result = spawnSync(command, args, { encoding: "utf8", shell: process.platform === "win32" });
+  const result = spawnSync(command, args, { 
+    encoding: "utf8", 
+    shell: process.platform === "win32",
+    env: process.env 
+  });
   return result.status === 0;
 }
 
 export function commandVersion(command: string, args = ["--version"]): string | undefined {
-  const result = spawnSync(command, args, { encoding: "utf8", shell: process.platform === "win32" });
+  const result = spawnSync(command, args, { 
+    encoding: "utf8", 
+    shell: process.platform === "win32",
+    env: process.env 
+  });
   if (result.status !== 0) return undefined;
   return (result.stdout || result.stderr || "").trim().split(/\r?\n/)[0]?.slice(0, 160) || "available";
 }
