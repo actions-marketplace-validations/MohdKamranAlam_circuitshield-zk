@@ -4,7 +4,7 @@
   "description": "Post-audit invariant drift monitoring and audit gate for ZK circuits.",
   "type": "module",
   "bin": {
-    "circuitshield": "./dist/cli.js"
+    "circuitshield": "dist/cli.js"
   },
   "files": [
     "dist",
