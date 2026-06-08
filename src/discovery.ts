@@ -3,7 +3,26 @@ import path from "node:path";
 import type { DiscoveredRepo } from "./types.js";
 import { normalizePath } from "./utils.js";
 
-const SKIP_DIRS = new Set([".git", "node_modules", "dist", ".circuitshield", ".tmp", "target"]);
+const SKIP_DIRS = new Set([
+  ".git",
+  ".github",
+  ".husky",
+  ".next",
+  ".turbo",
+  ".vite",
+  "node_modules",
+  "dist",
+  "dist-web",
+  "build",
+  "coverage",
+  ".circuitshield",
+  ".tmp",
+  "target",
+  "benchmarks",
+  "demos",
+  "examples",
+  "testing",
+]);
 
 export async function discoverRepo(root: string): Promise<DiscoveredRepo> {
   const circomFiles: string[] = [];

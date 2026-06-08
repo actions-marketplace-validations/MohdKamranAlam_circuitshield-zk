@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ArtifactInspection, CircuitConfig, Finding } from "./types.js";
@@ -28,52 +29,94 @@ export interface ArtifactInspectionResult {
   snarkjsReason: string;
 }
 
+export type ZkToolName = "circom" | "circomspect" | "snarkjs";
+
+export interface ResolvedTool {
+  name: ZkToolName;
+  command: string;
+  available: boolean;
+  version?: string;
+  reason: string;
+  checked: string[];
+}
+
+const TOOL_ENV: Record<ZkToolName, string> = {
+  circom: "CIRCOM_BIN",
+  circomspect: "CIRCOMSPECT_BIN",
+  snarkjs: "SNARKJS_BIN",
+};
+
+const VERSION_ARGS: Record<ZkToolName, string[]> = {
+  circom: ["--version"],
+  circomspect: ["--version"],
+  snarkjs: ["--help"],
+};
+
 export function isCommandAvailable(command: string, args = ["--version"]): boolean {
-  const result = spawnSync(command, args, { 
-    encoding: "utf8", 
-    shell: process.platform === "win32",
-    env: process.env 
-  });
+  const result = runToolCommand(command, args);
   return result.status === 0;
 }
 
 export function commandVersion(command: string, args = ["--version"]): string | undefined {
-  const result = spawnSync(command, args, { 
-    encoding: "utf8", 
-    shell: process.platform === "win32",
-    env: process.env 
-  });
+  const result = runToolCommand(command, args);
   if (result.status !== 0) return undefined;
   return (result.stdout || result.stderr || "").trim().split(/\r?\n/)[0]?.slice(0, 160) || "available";
 }
 
 export function detectToolVersions(): Record<string, string> {
   const versions: Record<string, string> = {};
-  const circom = commandVersion("circom");
-  const circomspect = commandVersion("circomspect");
-  const snarkjs = commandVersion("snarkjs", ["--help"]);
+  const circom = resolveTool("circom");
+  const circomspect = resolveTool("circomspect");
+  const snarkjs = resolveTool("snarkjs");
 
-  versions.circom = circom ?? "missing";
-  versions.circomspect = circomspect ?? "missing";
-  versions.snarkjs = snarkjs ?? "missing";
+  versions.circom = circom.version ?? "missing";
+  versions.circomspect = circomspect.version ?? "missing";
+  versions.snarkjs = snarkjs.version ?? "missing";
 
   return versions;
 }
 
 export function isCircomspectAvailable(): boolean {
-  return isCommandAvailable("circomspect");
+  return resolveTool("circomspect").available;
 }
 
 export function isCircomAvailable(): boolean {
-  return isCommandAvailable("circom");
+  return resolveTool("circom").available;
 }
 
 export function isSnarkjsAvailable(): boolean {
-  return isCommandAvailable("snarkjs", ["--help"]);
+  return resolveTool("snarkjs").available;
+}
+
+export function resolveTool(name: ZkToolName): ResolvedTool {
+  const args = VERSION_ARGS[name];
+  const candidates = toolCandidates(name);
+  for (const command of candidates) {
+    const result = runToolCommand(command, args);
+    if (result.status === 0) {
+      const version = (result.stdout || result.stderr || "").trim().split(/\r?\n/)[0]?.slice(0, 160) || "available";
+      return {
+        name,
+        command,
+        available: true,
+        version,
+        reason: command === name ? "found on PATH" : `found at ${command}`,
+        checked: candidates,
+      };
+    }
+  }
+  return {
+    name,
+    command: name,
+    available: false,
+    reason: `${name} binary not found. Checked: ${candidates.join(", ")}`,
+    checked: candidates,
+  };
 }
 
 export async function runCircomspect(root: string, circomFiles: string[]): Promise<CircomspectRunResult> {
-  if (!isCircomspectAvailable()) return { findings: [], executed: false, succeeded: false, reason: "circomspect binary not found on PATH" };
+  const tool = resolveTool("circomspect");
+  if (!tool.available) return { findings: [], executed: false, succeeded: false, reason: tool.reason };
   if (!circomFiles.length) return { findings: [], executed: false, succeeded: false, reason: "no Circom circuits discovered" };
   const findings: Finding[] = [];
   let succeeded = true;
@@ -84,9 +127,9 @@ export async function runCircomspect(root: string, circomFiles: string[]): Promi
       const sarifPath = path.join(tempDir, `${path.basename(file)}.sarif.json`);
       const absolute = toAbsolute(root, file);
       const result = spawnSync(
-        "circomspect",
+        tool.command,
         [absolute, "--sarif-file", sarifPath],
-        { encoding: "utf8", shell: process.platform === "win32" }
+        spawnOptions(tool.command)
       );
       if (result.status !== 0 && result.stderr) {
         succeeded = false;
@@ -134,8 +177,9 @@ export async function runCircomspect(root: string, circomFiles: string[]): Promi
 export async function compileCircomArtifacts(root: string, circuits: CircuitConfig[]): Promise<CircomCompileResult> {
   const findings: Finding[] = [];
   const hashes: Record<string, string> = {};
+  const tool = resolveTool("circom");
   if (!circuits.length) return { hashes, findings, executed: false, succeeded: false, reason: "no Circom circuits discovered" };
-  if (!isCircomAvailable()) {
+  if (!tool.available) {
     findings.push({
       id: "circom_compiler_missing",
       title: "Circom compiler is not available",
@@ -145,7 +189,7 @@ export async function compileCircomArtifacts(root: string, circuits: CircuitConf
       message: "Compiler artifact extraction was requested, but 'circom' was not found on PATH.",
       recommendation: "Install Circom 2 to enable compiled R1CS/WASM/SYM artifact drift tracking.",
     });
-    return { hashes, findings, executed: false, succeeded: false, reason: "circom binary not found on PATH" };
+    return { hashes, findings, executed: false, succeeded: false, reason: tool.reason };
   }
 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "circuitshield-compile-"));
@@ -155,10 +199,11 @@ export async function compileCircomArtifacts(root: string, circuits: CircuitConf
     for (const circuit of circuits) {
       const outputDir = path.join(tempRoot, circuit.id);
       const absolute = toAbsolute(root, circuit.path);
+      await mkdir(outputDir, { recursive: true });
       const result = spawnSync(
-        "circom",
+        tool.command,
         [absolute, "--r1cs", "--wasm", "--sym", "-o", outputDir],
-        { encoding: "utf8", shell: process.platform === "win32" }
+        spawnOptions(tool.command)
       );
       if (result.status !== 0) {
         succeeded = false;
@@ -211,7 +256,8 @@ export async function compileCircomArtifacts(root: string, circuits: CircuitConf
 export async function inspectProofArtifacts(root: string, artifactFiles: string[]): Promise<ArtifactInspectionResult> {
   const findings: Finding[] = [];
   const inspections: ArtifactInspection[] = [];
-  const snarkjsAvailable = isSnarkjsAvailable();
+  const snarkjsTool = resolveTool("snarkjs");
+  const snarkjsAvailable = snarkjsTool.available;
   let snarkjsExecuted = false;
   let snarkjsSucceeded = false;
   let snarkjsReason = artifactFiles.some((file) => file.toLowerCase().endsWith(".r1cs"))
@@ -262,7 +308,7 @@ export async function inspectProofArtifacts(root: string, artifactFiles: string[
     let status = native.status;
 
     if (snarkjsAvailable) {
-      const result = spawnSync("snarkjs", ["r1cs", "info", absolute], { encoding: "utf8", shell: process.platform === "win32" });
+      const result = spawnSync(snarkjsTool.command, ["r1cs", "info", absolute], spawnOptions(snarkjsTool.command));
       snarkjsExecuted = true;
       if (result.status === 0) {
         snarkjsSucceeded = true;
@@ -312,6 +358,63 @@ export async function inspectProofArtifacts(root: string, artifactFiles: string[
   }
 
   return { inspections, findings, snarkjsExecuted, snarkjsSucceeded, snarkjsReason };
+}
+
+function runToolCommand(command: string, args: string[]) {
+  return spawnSync(command, args, spawnOptions(command));
+}
+
+function spawnOptions(command: string) {
+  return {
+    encoding: "utf8" as const,
+    shell: process.platform === "win32" && !looksLikePath(command),
+    env: { ...process.env, PATH: augmentedPath() },
+  };
+}
+
+function looksLikePath(command: string): boolean {
+  return path.isAbsolute(command) || command.includes("/") || command.includes("\\");
+}
+
+function augmentedPath(): string {
+  const delimiter = path.delimiter;
+  const current = process.env.PATH ?? "";
+  const entries = new Set(current.split(delimiter).filter(Boolean));
+  for (const candidate of commonToolDirs()) entries.add(candidate);
+  return Array.from(entries).join(delimiter);
+}
+
+function commonToolDirs(): string[] {
+  const dirs: string[] = [];
+  const home = os.homedir();
+  const cwd = process.cwd();
+  if (home) {
+    dirs.push(path.join(home, ".cargo", "bin"));
+    dirs.push(path.join(home, ".local", "bin"));
+    dirs.push(path.join(home, ".npm-global", "bin"));
+    dirs.push(path.join(home, ".npm", "bin"));
+  }
+  if (process.env.CARGO_HOME) dirs.push(path.join(process.env.CARGO_HOME, "bin"));
+  if (process.env.NPM_CONFIG_PREFIX) dirs.push(path.join(process.env.NPM_CONFIG_PREFIX, "bin"));
+  if (process.env.APPDATA) dirs.push(path.join(process.env.APPDATA, "npm"));
+  dirs.push(path.join(cwd, "node_modules", ".bin"));
+  return dirs;
+}
+
+function toolCandidates(name: ZkToolName): string[] {
+  const candidates: string[] = [];
+  const envValue = process.env[TOOL_ENV[name]];
+  if (envValue) candidates.push(envValue);
+  candidates.push(name);
+  for (const dir of commonToolDirs()) {
+    candidates.push(path.join(dir, executableName(name)));
+    if (process.platform === "win32") candidates.push(path.join(dir, `${name}.cmd`), path.join(dir, `${name}.exe`));
+  }
+  return Array.from(new Set(candidates.filter((candidate) => candidate === name || existsSync(candidate))));
+}
+
+function executableName(name: ZkToolName): string {
+  return process.platform === "win32" ? `${name}.exe` : name;
 }
 
 function inspectR1csHeader(buffer: Buffer): { status: ArtifactInspection["status"]; detail: string; metadata: Record<string, unknown> } {

@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { writeDefaultConfig } from "./config.js";
+import { findConfig, writeDefaultConfig } from "./config.js";
 import { loadBaseline, saveBaseline, toBaselineSnapshot } from "./baseline.js";
 import { scanProject } from "./scanner.js";
 import { renderMarkdown } from "./reporters/markdown.js";
@@ -12,6 +12,7 @@ import { renderBenchmarkMarkdown, runBenchmarks } from "./benchmark.js";
 import { renderGithubComment } from "./reporters/githubComment.js";
 import { ensureDatabase, getDatabaseStatus } from "./db.js";
 import { renderBaselineDriftDemoMarkdown, runBaselineDriftDemo } from "./demo.js";
+import { resolveTool } from "./tooling.js";
 
 const program = new Command();
 
@@ -29,6 +30,34 @@ program
     await fs.mkdir(root, { recursive: true });
     const configPath = await writeDefaultConfig(root);
     console.log(`Created ${configPath}`);
+  });
+
+program
+  .command("doctor")
+  .description("Check CircuitShield config discovery and optional ZK toolchain availability.")
+  .argument("[target]", "Project root", ".")
+  .option("-c, --config <path>", "Path to circuitshield.yml")
+  .action(async (target: string, options: { config?: string }) => {
+    const root = path.resolve(target);
+    const configPath = await findConfig(root, options.config);
+    const tools = [resolveTool("circom"), resolveTool("circomspect"), resolveTool("snarkjs")];
+
+    console.log("CircuitShield Doctor");
+    console.log("");
+    console.log(`Root: ${root}`);
+    console.log(`Config loaded: ${configPath ? "yes" : "no"}`);
+    console.log(`Config path: ${configPath ?? "not found"}`);
+    console.log("");
+    console.log("| Tool | Available | Version | Command | Reason |");
+    console.log("| --- | --- | --- | --- | --- |");
+    for (const tool of tools) {
+      console.log(`| ${tool.name} | ${tool.available ? "yes" : "no"} | ${tool.version ?? "-"} | ${tool.available ? tool.command : "-"} | ${tool.reason.replace(/\|/g, "/")} |`);
+    }
+    console.log("");
+    console.log("Install hints:");
+    console.log("- circom: install Circom 2 and ensure the binary is on PATH, or set CIRCOM_BIN=/absolute/path/to/circom");
+    console.log("- circomspect: run `cargo install circomspect` and ensure ~/.cargo/bin is on PATH, or set CIRCOMSPECT_BIN=/absolute/path/to/circomspect");
+    console.log("- snarkjs: run `npm install -g snarkjs` and ensure the npm global bin directory is on PATH, or set SNARKJS_BIN=/absolute/path/to/snarkjs");
   });
 
 program

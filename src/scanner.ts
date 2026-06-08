@@ -7,7 +7,7 @@ import { analyzeVerifier } from "./rules/verifier.js";
 import { compareBaseline } from "./baseline.js";
 import { computeAuditGate, computeMetrics, invariantCoverage, scanConfidence } from "./scoring.js";
 import { artifactHashes, buildCircuitSnapshot, buildVerifierSnapshot, dependencyHashes } from "./snapshot.js";
-import { compileCircomArtifacts, detectToolVersions, inspectProofArtifacts, isCircomAvailable, isCircomspectAvailable, isSnarkjsAvailable, runCircomspect } from "./tooling.js";
+import { compileCircomArtifacts, detectToolVersions, inspectProofArtifacts, resolveTool, runCircomspect } from "./tooling.js";
 import { normalizePath } from "./utils.js";
 import { applySuppressions } from "./suppressions.js";
 import { buildInvariantStatuses } from "./invariants.js";
@@ -26,9 +26,12 @@ export async function scanProject(options: ScanOptions): Promise<ScanResult> {
   const { config, path: loadedConfigPath } = await loadConfig(root, options.configPath);
   const repo = await discoverRepo(root);
   const configLoaded = Boolean(loadedConfigPath);
-  const circomspectAvailable = isCircomspectAvailable();
-  const circomAvailable = isCircomAvailable();
-  const snarkjsAvailable = isSnarkjsAvailable();
+  const circomspectTool = resolveTool("circomspect");
+  const circomTool = resolveTool("circom");
+  const snarkjsTool = resolveTool("snarkjs");
+  const circomspectAvailable = circomspectTool.available;
+  const circomAvailable = circomTool.available;
+  const snarkjsAvailable = snarkjsTool.available;
   const circomspectRequested = options.useCircomspect !== false;
   const circomRequested = Boolean(options.compileArtifacts);
   const findings: Finding[] = [];
@@ -59,7 +62,7 @@ export async function scanProject(options: ScanOptions): Promise<ScanResult> {
       findings: [],
       executed: false,
       succeeded: false,
-      reason: toolReason(circomspectRequested, circomspectAvailable, circuits.length, "circomspect"),
+      reason: toolReason(circomspectRequested, circomspectAvailable, circuits.length, circomspectTool.reason),
     };
 
   if (circomspectRun.executed) {
@@ -71,7 +74,7 @@ export async function scanProject(options: ScanOptions): Promise<ScanResult> {
       severity: "info",
       category: "tooling",
       source: "cli",
-      message: "Circomspect was requested, but the 'circomspect' binary was not found on PATH.",
+      message: `Circomspect was requested, but it was not executed: ${circomspectTool.reason}.`,
       recommendation: installHint("circomspect"),
     }));
   } else {
@@ -246,14 +249,14 @@ function buildToolStatuses(result: ScanResult): ToolExecutionStatus[] {
 }
 
 function installHint(tool: "circom" | "circomspect" | "snarkjs"): string {
-  if (tool === "circom") return "Install Circom 2 and ensure 'circom' is on PATH. See https://docs.circom.io/getting-started/installation/";
-  if (tool === "circomspect") return "Install Circomspect and ensure 'circomspect' is on PATH. See https://github.com/trailofbits/circomspect";
-  return "Install snarkjs and ensure 'snarkjs' is on PATH, for example: npm install -g snarkjs";
+  if (tool === "circom") return "Install Circom 2 and ensure 'circom' is on PATH, or set CIRCOM_BIN to the binary path. See https://docs.circom.io/getting-started/installation/";
+  if (tool === "circomspect") return "Run 'cargo install circomspect', ensure ~/.cargo/bin is on PATH, or set CIRCOMSPECT_BIN to the binary path. See https://github.com/trailofbits/circomspect";
+  return "Run 'npm install -g snarkjs', ensure the npm global bin directory is on PATH, or set SNARKJS_BIN to the binary path.";
 }
 
-function toolReason(requested: boolean, available: boolean, circuitCount: number, binary: string): string {
+function toolReason(requested: boolean, available: boolean, circuitCount: number, missingReason: string): string {
   if (!requested) return "not requested";
-  if (!available) return `${binary} binary not found on PATH`;
+  if (!available) return missingReason;
   if (circuitCount === 0) return "no Circom circuits discovered";
   return "executed";
 }

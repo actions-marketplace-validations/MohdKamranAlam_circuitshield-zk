@@ -1,0 +1,69 @@
+version: 1
+
+project:
+  name: circuitshield-zk
+  baseline:
+    type: snapshot
+    ref: pilot-safe-self-check
+
+policy:
+  fail_on:
+    - critical_finding
+    - critical_invariant_coverage_drop
+  require_manual_review:
+    - baseline_missing
+    - verifier_key_change
+    - public_input_binding_change
+
+circuits:
+  - id: safe_withdraw
+    path: benchmarks/safe-withdraw/circuits/withdraw.circom
+    framework: circom
+    verifier: benchmarks/safe-withdraw/contracts/Verifier.sol
+    public_inputs:
+      - merkleRoot
+      - nullifierHash
+      - recipient
+      - amount
+      - chainId
+      - assetId
+    invariants:
+      - id: merkle_membership
+        type: merkle_membership
+        root: merkleRoot
+        severity: critical
+      - id: nullifier_unique
+        type: nullifier_unique
+        signal: nullifierHash
+        severity: critical
+      - id: value_conservation
+        type: value_conservation
+        inputs:
+          - balance
+        outputs:
+          - amount
+          - change
+        severity: critical
+      - id: amount_range
+        type: range_bound
+        signal: amount
+        bits: 64
+        severity: high
+      - id: domain_binding
+        type: domain_binding
+        signals:
+          - chainId
+          - assetId
+        severity: high
+
+verifiers:
+  - id: safe_withdraw_verifier
+    contract: benchmarks/safe-withdraw/contracts/Verifier.sol
+    circuit: safe_withdraw
+    public_input_order:
+      - merkleRoot
+      - nullifierHash
+      - recipient
+      - amount
+      - chainId
+      - assetId

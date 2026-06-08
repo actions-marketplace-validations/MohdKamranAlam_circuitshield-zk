@@ -60,6 +60,12 @@ npm install
 npm run build
 ```
 
+Quick health check:
+
+```powershell
+node dist/cli.js doctor . --config circuitshield.yml
+```
+
 ### Recommended Toolchain (for full features)
 
 For complete functionality (artifact compilation, Circomspect analysis, R1CS inspection), install these tools:
@@ -86,6 +92,33 @@ snarkjs --version
 ```
 
 > **Note:** CircuitShield works without these tools, but `--compile` and Circomspect rules will be skipped with clear "missing" status in reports.
+
+### GitHub Codespaces Toolchain Fix
+
+If a Codespace report shows `Config loaded: no`, run scans from the repository root with the root config:
+
+```bash
+node dist/cli.js scan . \
+  --config circuitshield.yml \
+  --format markdown \
+  --out pilot-report.md
+```
+
+If `circomspect` or `snarkjs` are missing, install the optional toolchain:
+
+```bash
+bash scripts/setup-zk-toolchain.sh
+export PATH="$HOME/.cargo/bin:$PATH"
+npm run build
+node dist/cli.js doctor . --config circuitshield.yml
+```
+
+You can also bypass PATH issues with explicit binary paths:
+
+```bash
+export CIRCOMSPECT_BIN="$HOME/.cargo/bin/circomspect"
+export SNARKJS_BIN="$(npm bin -g)/snarkjs"
+```
 
 ## Run UI
 
@@ -223,6 +256,7 @@ circuits:
 
 ```powershell
 circuitshield init
+circuitshield doctor . --config circuitshield.yml
 circuitshield scan .
 circuitshield scan . --compile
 circuitshield baseline create --ref audited-v1.0.0
