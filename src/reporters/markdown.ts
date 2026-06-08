@@ -47,7 +47,7 @@ export function renderMarkdown(result: ScanResult): string {
   lines.push("| Tool | Requested | Available | Executed | Succeeded | Version | Reason | Install hint | Confidence impact |");
   lines.push("| --- | --- | --- | --- | --- | --- | --- | --- | ---: |");
   for (const tool of result.toolStatus.tools ?? []) {
-    lines.push(`| ${tool.name} | ${yesNo(tool.requested)} | ${yesNo(tool.available)} | ${yesNo(tool.executed)} | ${yesNo(tool.succeeded)} | ${tool.version ?? "-"} | ${tool.reason} | ${tool.available ? "-" : tool.installHint ?? "-"} | -${tool.confidenceImpact} |`);
+    lines.push(`| ${tableCell(tool.name)} | ${yesNo(tool.requested)} | ${yesNo(tool.available)} | ${yesNo(tool.executed)} | ${yesNo(tool.succeeded)} | ${tableCell(tool.version ?? "-")} | ${tableCell(tool.reason)} | ${tableCell(tool.available ? "-" : tool.installHint ?? "-")} | -${tool.confidenceImpact} |`);
   }
   lines.push("");
   lines.push(`- Repository artifacts tracked: ${Object.keys(result.snapshots.artifactHashes).length}`);
@@ -89,7 +89,7 @@ export function renderMarkdown(result: ScanResult): string {
   lines.push("");
   lines.push("## Audit Gate Reasons");
   lines.push("");
-  for (const reason of result.auditGate.reasons) lines.push(`- ${reason}`);
+  for (const reason of result.auditGate.reasons) lines.push(`- ${cleanText(reason)}`);
   lines.push("");
   lines.push("## Findings");
   lines.push("");
@@ -106,8 +106,8 @@ export function renderMarkdown(result: ScanResult): string {
       lines.push(`- Confidence: ${Math.round((finding.confidence ?? 0) * 100)}%`);
       if (finding.invariantId) lines.push(`- Invariant affected: ${finding.invariantId}`);
       if (finding.gateImpact) lines.push(`- Gate impact: ${finding.gateImpact}`);
-      lines.push(`- Message: ${finding.message}`);
-      if (finding.recommendation) lines.push(`- Recommendation: ${finding.recommendation}`);
+      lines.push(`- Message: ${cleanText(finding.message)}`);
+      if (finding.recommendation) lines.push(`- Recommendation: ${cleanText(finding.recommendation)}`);
       lines.push("");
     }
   }
@@ -139,4 +139,16 @@ function shortHash(value?: string): string {
 
 function yesNo(value: boolean): string {
   return value ? "yes" : "no";
+}
+
+function tableCell(value: string): string {
+  return cleanText(value).replace(/\|/g, "/");
+}
+
+function cleanText(value: string): string {
+  return stripAnsi(value).replace(/\s+/g, " ").trim();
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;]*m/g, "");
 }

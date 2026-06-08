@@ -336,7 +336,7 @@ export async function inspectProofArtifacts(root: string, artifactFiles: string[
         detail = `${detail} snarkjs r1cs info executed successfully.`;
         if (status !== "invalid") status = "valid";
       } else {
-        metadata.snarkjsError = (result.stderr || result.stdout || "snarkjs failed").trim().slice(0, 800);
+        metadata.snarkjsError = summarizeToolError(result.stderr || result.stdout || "snarkjs failed");
         snarkjsReason = String(metadata.snarkjsError);
         findings.push({
           id: "snarkjs_r1cs_info_failed",
@@ -377,6 +377,24 @@ export async function inspectProofArtifacts(root: string, artifactFiles: string[
   }
 
   return { inspections, findings, snarkjsExecuted, snarkjsSucceeded, snarkjsReason };
+}
+
+function summarizeToolError(output: string): string {
+  const clean = stripAnsi(output)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("at ") && !line.startsWith("at async "));
+  const errorLine =
+    clean.find((line) => /error:/i.test(line)) ??
+    clean.find((line) => !line.includes("node_modules")) ??
+    clean[0] ??
+    "External tool failed.";
+  return errorLine.replace(/^.*?Error:\s*/i, "Error: ").slice(0, 240);
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 function runToolCommand(command: string, args: string[], argsPrefix: string[] = []) {
