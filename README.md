@@ -1,5 +1,7 @@
 # CircuitShield
 
+![CI](https://github.com/MohdKamranAlam/circuitshield-zk/actions/workflows/ci.yml/badge.svg)
+
 Post-audit invariant drift monitoring and audit gate for ZK circuits.
 
 CircuitShield is not an AI auditor and does not claim that a protocol is secure. It tracks whether ZK circuits, public inputs, verifier bindings, and declared invariants have drifted from a last audited baseline.
@@ -26,6 +28,22 @@ Has this PR drifted from the audited assumptions enough to require manual review
 - optional Circomspect integration when installed
 - JSON, Markdown, and SARIF reports
 - audit gate states: `PASS`, `WARN`, `MANUAL_REVIEW`, `REBASELINE_REQUIRED`, `BLOCK_CI`
+
+## Sample Audit-Readiness Report
+
+CircuitShield can generate pilot-style audit-readiness reports showing:
+
+- Audit Gate decision
+- Protocol Drift Risk
+- Invariant Coverage
+- Verifier Binding Risk
+- Toolchain execution status
+- Artifact drift
+- Findings and limitations
+
+See sample report:
+
+[Sample Audit-Readiness Report](docs/sample-reports/pilot-report-final-all-tools.md)
 
 ## Baseline Semantics
 
