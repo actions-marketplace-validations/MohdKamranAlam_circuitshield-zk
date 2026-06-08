@@ -45,6 +45,8 @@ interface ToolCandidate {
   command: string;
   argsPrefix?: string[];
   display: string;
+  acceptIfExists?: boolean;
+  versionHint?: string;
 }
 
 const TOOL_ENV: Record<ZkToolName, string> = {
@@ -105,8 +107,8 @@ export function resolveTool(name: ZkToolName): ResolvedTool {
   const candidates = toolCandidates(name);
   for (const candidate of candidates) {
     const result = runToolCommand(candidate.command, args, candidate.argsPrefix);
-    if (result.status === 0) {
-      const version = (result.stdout || result.stderr || "").trim().split(/\r?\n/)[0]?.slice(0, 160) || "available";
+    if (result.status === 0 || candidate.acceptIfExists) {
+      const version = (result.stdout || result.stderr || "").trim().split(/\r?\n/)[0]?.slice(0, 160) || candidate.versionHint || "available";
       const resolved = {
         name,
         command: candidate.command,
@@ -486,6 +488,8 @@ function snarkjsNodeCliCandidates(): ToolCandidate[] {
         command: process.execPath,
         argsPrefix: [cliFile],
         display: cliFile,
+        acceptIfExists: true,
+        versionHint: "snarkjs package CLI",
       });
     }
   }
