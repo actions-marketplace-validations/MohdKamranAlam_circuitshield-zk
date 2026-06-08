@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: MohdKamranAlam/circuitshield-zk@v0.1.1
+      - uses: MohdKamranAlam/circuitshield-zk@v0.1.2
         with:
           target: "."
           config: circuitshield.yml

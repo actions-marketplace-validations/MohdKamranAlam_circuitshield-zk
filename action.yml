@@ -1,5 +1,8 @@
 name: CircuitShield
 description: Post-audit invariant drift monitoring and audit gate for ZK circuits.
+branding:
+  icon: shield
+  color: blue
 inputs:
   target:
     description: Project path to scan.

@@ -1,6 +1,6 @@
 {
   "name": "circuitshield",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Post-audit invariant drift monitoring and audit gate for ZK circuits.",
   "type": "module",
   "bin": {
