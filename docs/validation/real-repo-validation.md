@@ -20,6 +20,7 @@ The goal of this validation was not to produce a `PASS` gate. These repositories
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | --- |
 | `iden3/circomlib` | yes | `MANUAL_REVIEW` | no | no | 104 | 0 | 66 | 65 medium, 1 high | 100/100 | 0/100 | 40/100 | executed; no SARIF output was produced |
 | `semaphore-protocol/semaphore` | yes | `MANUAL_REVIEW` | no | no | 1 | 0 | 7 | 7 medium | 100/100 | 0/100 | 50/100 | executed |
+| `tornadocash/tornado-core` | yes | `MANUAL_REVIEW` | no | no | 2 | 0 | 4 | 3 medium, 1 info | 100/100 | 0/100 | 40/100 | unavailable in local run |
 
 ## circomlib
 
@@ -124,6 +125,54 @@ Notes:
 - The scan completed against a real Semaphore-style repository.
 - Circomspect findings were normalized into CircuitShield findings.
 - `MANUAL_REVIEW` is expected because the target repo did not include a CircuitShield config or audited baseline.
+
+## Tornado Cash Core
+
+Repository:
+
+```text
+https://github.com/tornadocash/tornado-core
+```
+
+Command shape:
+
+```bash
+git clone --depth 1 https://github.com/tornadocash/tornado-core.git .tmp/validation/tornado-core
+node dist/cli.js scan .tmp/validation/tornado-core --format json --out .tmp/validation/tornado-core-scan.json
+node dist/cli.js scan .tmp/validation/tornado-core --format markdown --out .tmp/validation/tornado-core-report.md
+```
+
+Result:
+
+```text
+Gate: MANUAL_REVIEW
+Config loaded: false
+Baseline loaded: false
+Circuits: 2
+Verifiers: 0
+Findings: 4
+Severity: {"medium":3,"info":1}
+Invariant coverage: 100/100
+Verifier risk: 0/100
+Scan confidence: 40/100
+circomspect: unavailable in local run
+```
+
+Top findings:
+
+```text
+- MEDIUM config_missing project: circuitshield.yml not found
+- MEDIUM tautological_constraint circuits/merkleTree.circom:23 | Tautological constraint does not bind protocol state
+- INFO circomspect_unavailable project: Circomspect was requested but not executed
+- MEDIUM baseline_missing project: Audited baseline is missing
+```
+
+Notes:
+
+- The scan completed against a well-known legacy Circom protocol repository.
+- `MANUAL_REVIEW` is expected because the target repo did not include a CircuitShield config or audited baseline.
+- The tautological-constraint finding should be manually triaged before being treated as a protocol issue.
+- Circomspect was not available in this local run; this lowers scan confidence and should be rerun in a full toolchain environment for stronger evidence.
 
 ## Interpretation
 
