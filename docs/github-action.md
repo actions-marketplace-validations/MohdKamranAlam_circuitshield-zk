@@ -1,5 +1,41 @@
 # GitHub Action Workflow
 
+## Marketplace-style usage
+
+After publishing a release, downstream projects can run CircuitShield directly as a GitHub Action:
+
+```yaml
+name: circuitshield
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: MohdKamranAlam/circuitshield-zk@v0.1.1
+        with:
+          target: "."
+          config: circuitshield.yml
+          baseline: audited-v1.0.0
+          fail-on: manual
+          report: circuitshield-report.md
+          json-report: circuitshield-report.json
+          comment: circuitshield-comment.md
+```
+
+The action installs dependencies and builds CircuitShield from the released repository before running the scan.
+
+## Manual workflow
+
 Example workflow for a repository that vendors or installs CircuitShield:
 
 ```yaml
