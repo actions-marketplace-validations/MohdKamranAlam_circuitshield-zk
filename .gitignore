@@ -8,3 +8,4 @@ dist-web/
 .postgres-data/
 testing/
 semaphore/
+semaphore/
