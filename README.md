@@ -6,6 +6,12 @@ Post-audit invariant drift monitoring and audit gate for ZK circuits.
 
 CircuitShield is not an AI auditor and does not claim that a protocol is secure. It tracks whether ZK circuits, public inputs, verifier bindings, and declared invariants have drifted from a last audited baseline.
 
+## Demo Video
+
+Watch the 3-minute pilot demo:
+
+[CircuitShield: ZK Audit-Readiness CI Gate Demo](https://www.loom.com/share/6c5d1a3a7dc4443d8fc39397802a4e97)
+
 ## Pilot Offer
 
 CircuitShield is currently best used as a guided audit-readiness report for ZK teams that already have, or are preparing for, a professional audit.

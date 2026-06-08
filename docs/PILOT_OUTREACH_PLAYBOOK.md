@@ -6,6 +6,12 @@ CircuitShield is a CI audit gate for ZK projects. It helps teams check whether C
 
 It does not replace a professional ZK audit. It creates a repeatable audit-readiness report before releases and pull requests.
 
+Demo video:
+
+```text
+https://www.loom.com/share/6c5d1a3a7dc4443d8fc39397802a4e97
+```
+
 ## Productized Service Offer
 
 Offer:
@@ -101,6 +107,9 @@ Hey <name>,
 I am building CircuitShield, a CI audit gate for ZK/Circom projects.
 
 It checks whether circuits, Solidity verifiers, proving artifacts, and declared invariants have drifted from the last audited or reviewed baseline.
+
+Short demo:
+https://www.loom.com/share/6c5d1a3a7dc4443d8fc39397802a4e97
 
 I am looking for 3 pilot teams. I can run it on your repo and deliver an audit-readiness drift report with:
 
