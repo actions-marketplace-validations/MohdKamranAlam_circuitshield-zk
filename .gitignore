@@ -7,3 +7,4 @@ dist-web/
 .env
 .postgres-data/
 testing/
+semaphore/

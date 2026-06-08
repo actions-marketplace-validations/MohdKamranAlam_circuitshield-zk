@@ -48,10 +48,13 @@ program
     console.log(`Config loaded: ${configPath ? "yes" : "no"}`);
     console.log(`Config path: ${configPath ?? "not found"}`);
     console.log("");
-    console.log("| Tool | Available | Version | Command | Reason |");
-    console.log("| --- | --- | --- | --- | --- |");
+    console.log("Toolchain:");
     for (const tool of tools) {
-      console.log(`| ${tool.name} | ${tool.available ? "yes" : "no"} | ${tool.version ?? "-"} | ${tool.available ? tool.command : "-"} | ${tool.reason.replace(/\|/g, "/")} |`);
+      console.log(`- ${tool.name}`);
+      console.log(`  Available: ${tool.available ? "yes" : "no"}`);
+      console.log(`  Version: ${tool.version ?? "-"}`);
+      console.log(`  Command: ${tool.available ? tool.command : "-"}`);
+      console.log(`  Reason: ${tool.reason}`);
     }
     console.log("");
     console.log("Install hints:");
