@@ -107,6 +107,14 @@ Current behavior (now always reports status clearly):
 
 ## Install
 
+Run without installing globally:
+
+```powershell
+npx circuitshield scan examples --config examples/circuitshield.yml --format markdown
+```
+
+Or install from source:
+
 ```powershell
 npm install
 npm run build

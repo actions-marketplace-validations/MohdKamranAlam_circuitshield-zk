@@ -6,8 +6,31 @@
   "bin": {
     "circuitshield": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "action.yml",
+    "docs/github-action.md",
+    "docs/sample-reports",
+    "docs/validation",
+    "examples",
+    "benchmarks"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MohdKamranAlam/circuitshield-zk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MohdKamranAlam/circuitshield-zk/issues"
+  },
+  "homepage": "https://github.com/MohdKamranAlam/circuitshield-zk#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
     "dev": "tsx src/cli.ts",
     "api": "tsx src/server.ts",
     "api:built": "node dist/server.js",
@@ -25,22 +48,26 @@
     "circom",
     "audit",
     "security",
-    "zero-knowledge"
+    "zero-knowledge",
+    "zk-snarks",
+    "github-action",
+    "static-analysis",
+    "smart-contracts"
   ],
   "license": "Apache-2.0",
   "dependencies": {
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",
-    "lucide-react": "^0.468.0",
     "pg": "^8.13.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "yaml": "^2.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
     "@types/pg": "^8.11.11",
     "@vitejs/plugin-react": "^4.3.4",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"
